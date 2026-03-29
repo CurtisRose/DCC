@@ -43,6 +43,13 @@ namespace DCC.Core.Entities
         [field: SerializeField] public float BaseArmor { get; private set; } = 0f;
         [field: SerializeField] public float BaseMoveSpeed { get; private set; } = 5f;
 
+        [Header("Resistances")]
+        [field: SerializeField, Tooltip(
+            "Resistance profiles applied to all incoming effects. " +
+            "Evaluated in order; multipliers stack, InvertsEffect toggles.\n\n" +
+            "Example: assign Resistance_Undead to make ALL healing damage this entity.")]
+        public ResistanceProfile[] ResistanceProfiles { get; private set; }
+
         [Header("Loot & Economy")]
         [field: SerializeField] public int BaseXP { get; private set; } = 10;
         [field: SerializeField] public float LootMultiplier { get; private set; } = 1f;

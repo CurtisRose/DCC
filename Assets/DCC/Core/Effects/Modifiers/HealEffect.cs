@@ -29,13 +29,22 @@ namespace DCC.Core.Effects.Modifiers
 
         public override void OnApply(EffectInstance instance, EntityAttributes target)
         {
-            target.AttributeSet.ApplyHeal(instance.ResolvedMagnitude, AllowOverheal);
+            // Negative magnitude means the effect was inverted by a ResistanceProfile
+            // (e.g., undead entity has InvertsEffect on Healing tag).
+            // A negative heal becomes damage automatically — no special case.
+            if (instance.ResolvedMagnitude < 0f)
+                target.AttributeSet.ApplyDamage(-instance.ResolvedMagnitude, instance.Context);
+            else
+                target.AttributeSet.ApplyHeal(instance.ResolvedMagnitude, AllowOverheal);
         }
 
         public override void OnTick(EffectInstance instance, EntityAttributes target)
         {
             // Ongoing heal-over-time (e.g., healing smoke cloud ticking each second).
-            target.AttributeSet.ApplyHeal(instance.ResolvedMagnitude, AllowOverheal);
+            if (instance.ResolvedMagnitude < 0f)
+                target.AttributeSet.ApplyDamage(-instance.ResolvedMagnitude, instance.Context);
+            else
+                target.AttributeSet.ApplyHeal(instance.ResolvedMagnitude, AllowOverheal);
         }
     }
 }

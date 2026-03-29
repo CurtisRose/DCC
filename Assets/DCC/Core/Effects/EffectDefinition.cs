@@ -119,6 +119,32 @@ namespace DCC.Core.Effects
 
         /// <summary>Called when the effect expires or is manually removed.</summary>
         public virtual void OnRemove(EffectInstance instance, EntityAttributes target) { }
+
+        [Header("Inversion (for ResistanceProfile.InvertsEffect)")]
+        [field: SerializeField, Tooltip(
+            "The effect to swap to when a ResistanceProfile inverts this effect.\n" +
+            "Example: HealEffect.InvertedEffect = DamageEffect of the same magnitude.\n" +
+            "Leave null to simply negate the magnitude (heal 50 → damage 50 as damage).")]
+        public EffectDefinition InvertedEffect { get; private set; }
+
+        /// <summary>
+        /// Called by EntityAttributes when a ResistanceProfile.InvertsEffect is true.
+        /// If InvertedEffect is assigned, redirects the instance to that definition.
+        /// Otherwise negates magnitude (works for most heal/damage pairs).
+        /// </summary>
+        public void InvertEffect(EffectInstance instance)
+        {
+            if (InvertedEffect != null)
+            {
+                instance.SwapDefinition(InvertedEffect);
+            }
+            else
+            {
+                // Negate: a positive heal becomes a negative heal = damage, handled
+                // by the effect's OnApply reading the sign of ResolvedMagnitude.
+                instance.ResolvedMagnitude = -instance.ResolvedMagnitude;
+            }
+        }
     }
 
     // ── Supporting types ───────────────────────────────────────────────────────

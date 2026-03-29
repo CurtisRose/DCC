@@ -106,6 +106,9 @@ namespace DCC.Core.Entities
             _activeEffects.Add(instance);
             OnEffectApplied?.Invoke(instance);
 
+            // Apply resistance profiles: scale magnitude and handle inversion.
+            ApplyResistances(instance);
+
             // Instant effects apply once immediately.
             if (instance.Definition.Duration == 0f)
             {
@@ -166,6 +169,42 @@ namespace DCC.Core.Entities
         }
 
         // ── Internals ──────────────────────────────────────────────────────
+
+        /// <summary>
+        /// Evaluates all ResistanceProfiles on this entity against the effect's tag set.
+        /// Scales magnitude and, if InvertsEffect is flagged, swaps the effect definition
+        /// for its inverse (Heal→Damage or Damage→Heal) using the InvertedEffect asset ref.
+        ///
+        /// This is the point where "Healing damages Undead" happens — not in the item,
+        /// not in the ability, but here when the effect lands on an entity whose
+        /// ResistanceProfile says { Tag: Healing, InvertsEffect: true }.
+        /// </summary>
+        private void ApplyResistances(EffectInstance instance)
+        {
+            if (_definition?.ResistanceProfiles == null) return;
+
+            var effectTags = Tags.EffectiveMask;
+            // Also include the effect's own granted tags in the tag set to check against.
+            if (instance.GrantedTags != null)
+                foreach (var t in instance.GrantedTags)
+                    if (t != null && t.RuntimeId >= 0) effectTags.Set(t.RuntimeId);
+
+            float totalMultiplier = 1f;
+            bool inverted = false;
+
+            foreach (var profile in _definition.ResistanceProfiles)
+            {
+                if (profile == null) continue;
+                profile.Evaluate(effectTags, out float mult, out bool inv);
+                totalMultiplier *= mult;
+                if (inv) inverted = !inverted;
+            }
+
+            instance.ResolvedMagnitude *= totalMultiplier;
+
+            if (inverted)
+                instance.Definition.InvertEffect(instance);
+        }
 
         private bool IsBlockedByConcurrentEffect(EffectInstance incoming)
         {

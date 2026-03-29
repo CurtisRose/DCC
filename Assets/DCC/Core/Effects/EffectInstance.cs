@@ -47,6 +47,17 @@ namespace DCC.Core.Effects
             };
         }
 
+        /// <summary>
+        /// Replaces this instance's definition with another.
+        /// Used by ResistanceProfile inversion (e.g., heal → damage on undead).
+        /// The new definition's GrantedTags are also applied.
+        /// </summary>
+        public void SwapDefinition(EffectDefinition replacement)
+        {
+            Definition = replacement;
+            GrantedTags = replacement.GrantedTags;
+        }
+
         public void Release()
         {
             // Return to pool.
