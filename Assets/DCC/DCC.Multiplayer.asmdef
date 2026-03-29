@@ -1,0 +1,19 @@
+{
+  "name": "DCC.Multiplayer",
+  "rootNamespace": "DCC.Multiplayer",
+  "references": [
+    "DCC.Core",
+    "DCC.Items",
+    "DCC.Abilities",
+    "Unity.Netcode.Runtime"
+  ],
+  "includePlatforms": [],
+  "excludePlatforms": [],
+  "allowUnsafeCode": false,
+  "overrideReferences": false,
+  "precompiledReferences": [],
+  "autoReferenced": true,
+  "defineConstraints": [],
+  "versionDefines": [],
+  "noEngineReferences": false
+}
