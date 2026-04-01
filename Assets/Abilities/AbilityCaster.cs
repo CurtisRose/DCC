@@ -13,8 +13,9 @@ namespace DCC.Abilities
     /// Server-authoritative ability execution. Attached alongside EntityAttributes.
     /// PlayerNetworkController.UseAbilityServerRpc calls CastAbility here.
     ///
-    /// Cooldowns are stored per-slot and validated on the server.
-    /// Clients send the request; the server decides whether it fires.
+    /// Validates: cooldown, caster tags, mana cost (spells), skill requirements.
+    /// For spells, magnitude is scaled by Intelligence (SpellPowerMultiplier).
+    /// For skill-based abilities, magnitude scales with the skill's effectiveness.
     /// </summary>
     [RequireComponent(typeof(EntityAttributes))]
     public class AbilityCaster : NetworkBehaviour
@@ -22,9 +23,14 @@ namespace DCC.Abilities
         [SerializeField] private AbilityDefinition[] _equippedAbilities = new AbilityDefinition[4];
 
         private EntityAttributes _caster;
+        private SkillTracker _skills;
         private readonly Dictionary<int, float> _lastUsedTime = new();
 
-        private void Awake() => _caster = GetComponent<EntityAttributes>();
+        private void Awake()
+        {
+            _caster = GetComponent<EntityAttributes>();
+            _skills = GetComponent<SkillTracker>();
+        }
 
         /// <summary>Called server-side only. Validates and executes the ability.</summary>
         public void CastAbility(int slot, Vector3 targetPos, ulong callerClientId)
@@ -44,6 +50,23 @@ namespace DCC.Abilities
             if (ability.RequiredCasterTags != null)
                 foreach (var tag in ability.RequiredCasterTags)
                     if (tag != null && !_caster.Tags.HasTag(tag)) return;
+
+            // Skill requirement check.
+            if (ability.RequiredSkill != null && _skills != null)
+            {
+                int level = _skills.GetSkillLevel(ability.RequiredSkill);
+                if (level < ability.RequiredSkillLevel) return;
+            }
+
+            // Mana cost check (spells only).
+            if (ability.IsSpell && ability.ManaCost > 0f)
+            {
+                if (!_caster.AttributeSet.SpendMana(ability.ManaCost)) return;
+            }
+
+            // Record skill use for leveling (if ability has a linked skill).
+            if (ability.RequiredSkill != null && _skills != null)
+                _skills.RecordSkillUse(ability.RequiredSkill);
 
             _lastUsedTime[slot] = Time.time;
 

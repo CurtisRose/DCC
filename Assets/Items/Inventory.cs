@@ -27,12 +27,14 @@ namespace DCC.Items
         private ItemSlot[] _slots;
         private readonly Dictionary<int, float> _cooldowns = new();
         private EntityAttributes _owner;
+        private PotionCooldownTracker _potionCooldown;
 
         // ── Lifecycle ──────────────────────────────────────────────────────
 
         private void Awake()
         {
             _owner = GetComponent<EntityAttributes>();
+            _potionCooldown = GetComponent<PotionCooldownTracker>();
             _slots = new ItemSlot[_slotCount];
         }
 
@@ -80,6 +82,10 @@ namespace DCC.Items
                     InfuseNearestZone(def, targetPos, ctx);
                     break;
             }
+
+            // Potion cooldown check — drinking too fast = Poisoned (faithful to DCC books).
+            if (def.IsPotion && _potionCooldown != null)
+                _potionCooldown.NotifyPotionConsumed();
 
             // Consume one stack.
             itemSlot.Quantity--;

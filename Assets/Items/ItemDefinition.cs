@@ -14,16 +14,34 @@ namespace DCC.Items
     ///
     /// Example items (all configured in assets, no code):
     ///
-    ///   Smoke Grenade:
-    ///     UseMode: SpawnZone(SmokZoneDef)
-    ///     ItemTags: [Throwable, Grenade, Gas, Smoke]
-    ///     ZoneEffects: [SmokeEffect]           → obscures vision
-    ///
-    ///   Healing Potion:
-    ///     UseMode: ApplyEffectAtCursor
-    ///     ItemTags: [Consumable, Magical, Healing]
+    ///   Good Healing Potion:
+    ///     UseMode: ApplyEffectAtSelf
+    ///     IsPotion: true, PotionTier: Good
+    ///     ItemTags: [Consumable, Magical, Healing, Potion]
     ///     OnUseEffects: [HealEffect(50)]
-    ///     Can be thrown into a SmokeZone → infuses HealEffect into zone
+    ///     → Triggers potion cooldown. Chugging another before cooldown = Poisoned.
+    ///
+    ///   Great Mana Potion:
+    ///     UseMode: ApplyEffectAtSelf
+    ///     IsPotion: true, PotionTier: Great
+    ///     ItemTags: [Consumable, Magical, Mana, Potion]
+    ///     OnUseEffects: [ManaRestoreEffect]
+    ///
+    ///   Superb Strength Potion:
+    ///     UseMode: ApplyEffectAtSelf
+    ///     IsPotion: true, PotionTier: Superb
+    ///     ItemTags: [Consumable, Magical, Potion]
+    ///     OnUseEffects: [StatModifierEffect(Str+5, Duration:600)]
+    ///
+    ///   Poison Antidote:
+    ///     UseMode: ApplyEffectAtSelf
+    ///     IsPotion: true, PotionTier: Good
+    ///     ItemTags: [Consumable, Antidote, Potion]
+    ///     OnUseEffects: [] (removes Poisoned tag — configured via BlockedConcurrentTags)
+    ///
+    ///   Smoke Grenade:
+    ///     UseMode: SpawnZone(SmokeZoneDef)
+    ///     ItemTags: [Throwable, Grenade, Gas, Smoke]
     ///
     ///   Holy Water Flask:
     ///     UseMode: SpawnZone(WaterZoneDef)
@@ -35,7 +53,6 @@ namespace DCC.Items
     ///     UseMode: PlaceTrap
     ///     ItemTags: [Trap, Magical, Teleport]
     ///     TrapEffects: [TeleportEffect(RequiredTargetTags:[Corporeal])]
-    ///     → Teleports anyone/anything Corporeal that steps on it
     /// </summary>
     [CreateAssetMenu(menuName = "DCC/Item", fileName = "Item_New")]
     public class ItemDefinition : ScriptableObject
@@ -50,11 +67,37 @@ namespace DCC.Items
             InfuseZone               // infuses effects into an existing zone at target pos
         }
 
+        /// <summary>
+        /// Potion quality tiers from the DCC books. Higher tiers have stronger effects.
+        /// Potion tier does NOT affect cooldown — any potion triggers the shared cooldown.
+        /// </summary>
+        public enum PotionTier
+        {
+            None,       // not a potion
+            Good,       // standard quality
+            Great,      // enhanced
+            Superb,     // rare, powerful
+            Cosmic      // legendary rarity
+        }
+
         [field: SerializeField] public string DisplayName { get; private set; }
         [field: SerializeField] public Sprite Icon { get; private set; }
         [field: SerializeField, TextArea] public string Description { get; private set; }
 
         [field: SerializeField] public UseMode Mode { get; private set; }
+
+        [Header("Potion")]
+        [field: SerializeField, Tooltip(
+            "If true, consuming this item triggers the potion cooldown. " +
+            "Drinking another potion before cooldown expires inflicts Poisoned (faithful to DCC books).")]
+        public bool IsPotion { get; private set; }
+
+        [field: SerializeField, Tooltip("Potion quality tier. Higher tiers have stronger effects in the books.")]
+        public PotionTier Tier { get; private set; } = PotionTier.None;
+
+        [Header("Item Rarity")]
+        [field: SerializeField]
+        public ItemRarity Rarity { get; private set; } = ItemRarity.Common;
 
         [Header("Tags")]
         [field: SerializeField, Tooltip("Tags this item has when it exists as a world object.")]
@@ -74,5 +117,19 @@ namespace DCC.Items
         [field: SerializeField] public int MaxStackSize { get; private set; } = 1;
 
         [field: SerializeField] public float Cooldown { get; private set; } = 0f;
+    }
+
+    /// <summary>
+    /// Item rarity tiers from the DCC books (ascending).
+    /// Loot boxes follow a similar but separate tier system.
+    /// </summary>
+    public enum ItemRarity
+    {
+        Common,
+        Uncommon,
+        Rare,
+        Legendary,
+        Artifact,
+        Celestial
     }
 }

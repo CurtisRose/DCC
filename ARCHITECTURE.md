@@ -112,6 +112,56 @@ AllegianceMatrix (Server)    ← tracks teams, dynamic alliances
 
 ---
 
+## Crawler Stats & Progression
+
+Faithful to the DCC books. Five core stats, DCC scale: 0 = unconscious, 4 = average, 10 = peak human.
+
+| Stat | Drives | Derived From |
+|------|--------|--------------|
+| **Strength** | Melee damage multiplier (+10%/pt above 4), athletics | `MeleeDamageMultiplier` |
+| **Constitution** | Max HP (50 + Con×25), health regen, potion cooldown | `MaxHealth`, `HealthRegenPerSecond`, `PotionCooldownDuration` |
+| **Dexterity** | Move speed bonus (+3%/pt above 4), dodge, crafting | `MoveSpeed` |
+| **Intelligence** | Max MP (= Int), mana regen, spell power (+8%/pt above 4) | `MaxMana`, `ManaRegenPerSecond`, `SpellPowerMultiplier` |
+| **Charisma** | NPC manipulation, pet slots, bard magic, sponsor appeal | _(gameplay hooks)_ |
+
+**Leveling**: 3 stat points per level (allocated in safe rooms).
+
+### Mana System
+- Max MP = Intelligence score (1 Int = 1 MP, faithful to books)
+- Mana regen scales exponentially with Int (Int 3 ≈ 1 MP/hour, Int 17 ≈ 1 MP/min)
+- Spells cost mana (configured per AbilityDefinition)
+- Mana Potions restore MP instantly
+
+### Skills vs Spells
+- **Skills**: Nonmagical talents, no mana cost, level through use (cap 15, Primal race → 20)
+- **Spells**: Magical, cost mana, learned from tomes, scale with Intelligence
+- Both configured as AbilityDefinition assets; `IsSpell` flag distinguishes them
+
+### Potion Cooldown
+After drinking any potion, a cooldown starts (30s – Con×0.5s, min 5s).
+Drinking another potion during cooldown inflicts Poisoned. Faithful to the books.
+
+---
+
+## Buffs, Debuffs & Status Effects
+
+All status effects are `StatusEffect` assets with a `StatusType`:
+
+| StatusType | Behavior | Examples |
+|------------|----------|----------|
+| `Debuff` | Tags + speed change only | Slowed, Frosted |
+| `DamageOverTime` | Periodic damage ticks | Poisoned, Sepsis, Bleed, Burning |
+| `HealOverTime` | Periodic healing ticks | Regeneration |
+| `CrowdControl` | Prevents actions/movement | Stunned, Paralyzed, Fear, Peace-Bonded |
+
+Key DCC distinction: **Poisoned** has `ImmuneToHealing: true` (needs antidote), while **Sepsis** can be healed with Heal spells/potions.
+
+### Stat Modifier Buffs
+`StatModifierEffect` temporarily modifies crawler stats. Used for buff potions, gear enchantments, curses.
+Stacks additively. Cleanly removed on expiration.
+
+---
+
 ## Multiplayer Authority Model
 
 | System | Authority |

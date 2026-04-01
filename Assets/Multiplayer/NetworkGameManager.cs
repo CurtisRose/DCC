@@ -2,6 +2,7 @@ using System.Collections.Generic;
 using Unity.Netcode;
 using UnityEngine;
 using DCC.Core.Tags;
+using DCC.Core.Entities;
 
 namespace DCC.Multiplayer
 {
@@ -26,6 +27,15 @@ namespace DCC.Multiplayer
         [Header("Tag Configuration")]
         [SerializeField, Tooltip("All TagDefinition assets in the project. Load via Resources.LoadAll in production.")]
         private TagDefinition[] _allTags;
+
+        [Header("Race & Class")]
+        [SerializeField, Tooltip("All available races. Indexed by client selection.")]
+        private RaceDefinition[] _availableRaces;
+        [SerializeField, Tooltip("All available classes. Indexed by client selection.")]
+        private ClassDefinition[] _availableClasses;
+
+        // Stores client race/class choices made in lobby before spawn.
+        private readonly Dictionary<ulong, (int raceIndex, int classIndex)> _pendingChoices = new();
 
         private readonly Dictionary<ulong, GameObject> _spawnedPlayers = new();
         private int _spawnIndex = 0;
@@ -114,6 +124,25 @@ namespace DCC.Multiplayer
         [ClientRpc]
         private void AnnounceGameOverClientRpc() { /* Show game over screen. */ }
 
+        // ── Race/Class Selection (Lobby) ──────────────────────────────────
+
+        /// <summary>
+        /// Called by clients in the lobby to choose their Race and Class.
+        /// Selection is stored until match start, then applied during spawn.
+        /// </summary>
+        [ServerRpc(RequireOwnership = false)]
+        public void SelectRaceAndClassServerRpc(int raceIndex, int classIndex, ServerRpcParams rpcParams = default)
+        {
+            ulong clientId = rpcParams.Receive.SenderClientId;
+            if (_matchState.Value != MatchState.Lobby) return;
+
+            // Validate indices.
+            if (_availableRaces == null || raceIndex < 0 || raceIndex >= _availableRaces.Length) return;
+            if (_availableClasses == null || classIndex < 0 || classIndex >= _availableClasses.Length) return;
+
+            _pendingChoices[clientId] = (raceIndex, classIndex);
+        }
+
         // ── Spawning ──────────────────────────────────────────────────────
 
         private void SpawnPlayer(ulong clientId)
@@ -129,6 +158,20 @@ namespace DCC.Multiplayer
             var netObj = go.GetComponent<NetworkObject>();
             netObj.SpawnAsPlayerObject(clientId, destroyWithScene: true);
             _spawnedPlayers[clientId] = go;
+
+            // Apply race/class if the client made a selection in lobby.
+            var identity = go.GetComponent<CrawlerIdentity>();
+            if (identity != null && _pendingChoices.TryGetValue(clientId, out var choice))
+            {
+                var race = _availableRaces[choice.raceIndex];
+                var cls = _availableClasses[choice.classIndex];
+
+                // Validate class requirements before applying.
+                if (identity.MeetsClassRequirements(cls))
+                    identity.Initialize(race, cls);
+                else
+                    Debug.LogWarning($"[NetworkGameManager] Client {clientId} doesn't meet requirements for {cls.DisplayName}.");
+            }
         }
     }
 }

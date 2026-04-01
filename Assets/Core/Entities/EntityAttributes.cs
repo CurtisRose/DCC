@@ -10,18 +10,16 @@ namespace DCC.Core.Entities
 {
     /// <summary>
     /// The central component on every living and interactable entity.
-    /// Owns the AttributeSet (health, armor, speed) and manages all active EffectInstances.
+    /// Owns the AttributeSet (health, mana, crawler stats, armor, speed) and manages
+    /// all active EffectInstances.
     ///
     /// Server-authoritative:
-    ///   - Health is a NetworkVariable so all clients see it.
+    ///   - Health and Mana are NetworkVariables so all clients see them.
+    ///   - Crawler stats (Str/Con/Dex/Int/Cha) are server-authoritative.
     ///   - Effect application and ticking only run on the server.
-    ///   - Clients read health for UI via the NetworkVariable.
+    ///   - Health and mana regen tick server-side.
     ///
     /// Friendly fire is always on: this class applies damage regardless of allegiance.
-    /// The AllegianceMatrix is checked upstream (by the ability/item system) only for
-    ///   - XP attribution
-    ///   - AI target priority
-    ///   - Discovery log labeling ("you damaged an ally")
     /// </summary>
     [RequireComponent(typeof(TagContainer))]
     [RequireComponent(typeof(AllegianceComponent))]
@@ -43,8 +41,24 @@ namespace DCC.Core.Entities
             readPerm: NetworkVariableReadPermission.Everyone,
             writePerm: NetworkVariableWritePermission.Server);
 
+        // Networked mana so clients can show mana bars.
+        private NetworkVariable<float> _networkMana = new(
+            readPerm: NetworkVariableReadPermission.Everyone,
+            writePerm: NetworkVariableWritePermission.Server);
+        private NetworkVariable<float> _networkMaxMana = new(
+            readPerm: NetworkVariableReadPermission.Everyone,
+            writePerm: NetworkVariableWritePermission.Server);
+
+        // Networked level for UI display.
+        private NetworkVariable<int> _networkLevel = new(
+            readPerm: NetworkVariableReadPermission.Everyone,
+            writePerm: NetworkVariableWritePermission.Server);
+
         public float NetworkHealth => _networkHealth.Value;
         public float NetworkMaxHealth => _networkMaxHealth.Value;
+        public float NetworkMana => _networkMana.Value;
+        public float NetworkMaxMana => _networkMaxMana.Value;
+        public int NetworkLevel => _networkLevel.Value;
 
         // Server-only: active running effects.
         private readonly List<EffectInstance> _activeEffects = new();
@@ -78,15 +92,84 @@ namespace DCC.Core.Entities
             base.OnNetworkSpawn();
             if (IsServer)
             {
-                _networkHealth.Value = AttributeSet.CurrentHealth;
-                _networkMaxHealth.Value = AttributeSet.MaxHealth;
+                SyncAllStats();
             }
         }
 
         private void Update()
         {
             if (!IsServer) return;
-            TickActiveEffects(Time.deltaTime);
+
+            float dt = Time.deltaTime;
+            TickActiveEffects(dt);
+            TickRegen(dt);
+        }
+
+        // ── Regen ──────────────────────────────────────────────────────────
+
+        private void TickRegen(float deltaTime)
+        {
+            if (!AttributeSet.IsAlive) return;
+
+            // Health regen (Constitution-driven).
+            if (AttributeSet.CurrentHealth < AttributeSet.MaxHealth)
+            {
+                float hpRegen = AttributeSet.HealthRegenPerSecond * deltaTime;
+                if (hpRegen > 0f)
+                {
+                    AttributeSet.ApplyHeal(hpRegen);
+                    SyncHealth();
+                }
+            }
+
+            // Mana regen (Intelligence-driven).
+            if (AttributeSet.CurrentMana < AttributeSet.MaxMana)
+            {
+                float mpRegen = AttributeSet.ManaRegenPerSecond * deltaTime;
+                if (mpRegen > 0f)
+                {
+                    AttributeSet.RestoreMana(mpRegen);
+                    SyncMana();
+                }
+            }
+        }
+
+        // ── Stat allocation (only in safe rooms in DCC) ────────────────────
+
+        [ServerRpc(RequireOwnership = false)]
+        public void AllocateStatPointServerRpc(CrawlerStat stat, ServerRpcParams rpcParams = default)
+        {
+            if (!AttributeSet.AllocateStatPoint(stat)) return;
+            SyncAllStats();
+        }
+
+        /// <summary>
+        /// Grants XP and levels up if threshold is reached.
+        /// Each level grants 3 stat points (faithful to books).
+        /// </summary>
+        public void GrantXP(int amount)
+        {
+            if (!IsServer) return;
+            // Simple leveling: 100 XP per level, scaling by current level.
+            // (Tune this formula as needed for game feel.)
+            _xpAccumulated += amount;
+            int xpRequired = AttributeSet.Level * 100;
+            while (_xpAccumulated >= xpRequired)
+            {
+                _xpAccumulated -= xpRequired;
+                AttributeSet.GainLevel();
+                xpRequired = AttributeSet.Level * 100;
+                NotifyLevelUpClientRpc(AttributeSet.Level);
+            }
+            SyncAllStats();
+        }
+
+        private int _xpAccumulated;
+
+        [ClientRpc]
+        private void NotifyLevelUpClientRpc(int newLevel)
+        {
+            // Clients play level-up VFX, sound, show stat allocation UI.
         }
 
         // ── Effect application ─────────────────────────────────────────────
@@ -222,8 +305,26 @@ namespace DCC.Core.Entities
 
         private void SyncHealth()
         {
-            if (IsServer)
-                _networkHealth.Value = AttributeSet.CurrentHealth;
+            if (!IsServer) return;
+            _networkHealth.Value = AttributeSet.CurrentHealth;
+            _networkMaxHealth.Value = AttributeSet.MaxHealth;
+        }
+
+        private void SyncMana()
+        {
+            if (!IsServer) return;
+            _networkMana.Value = AttributeSet.CurrentMana;
+            _networkMaxMana.Value = AttributeSet.MaxMana;
+        }
+
+        private void SyncAllStats()
+        {
+            if (!IsServer) return;
+            _networkHealth.Value = AttributeSet.CurrentHealth;
+            _networkMaxHealth.Value = AttributeSet.MaxHealth;
+            _networkMana.Value = AttributeSet.CurrentMana;
+            _networkMaxMana.Value = AttributeSet.MaxMana;
+            _networkLevel.Value = AttributeSet.Level;
         }
 
         private void HandleDamageTaken(float raw, float final, EffectContext ctx)
