@@ -27,6 +27,16 @@ namespace DCC.Core.Allegiance
         public bool IsPlayerOwned => _ownerClientId.Value != 0;
         public bool IsEnvironment => _ownerClientId.Value == 0;
 
+        /// <summary>
+        /// Server-only: assign ownership and team (for summoned pets, traps, etc.).
+        /// </summary>
+        public void SetOwnership(ulong ownerClientId, int teamId)
+        {
+            if (!IsServer) return;
+            _ownerClientId.Value = ownerClientId;
+            _teamId.Value = teamId;
+        }
+
         public override void OnNetworkSpawn()
         {
             base.OnNetworkSpawn();

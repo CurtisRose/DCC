@@ -33,6 +33,7 @@ namespace DCC.Multiplayer
         private EntityAttributes _attributes;
         private Rigidbody _rb;
         private Items.Inventory _inventory;
+        private Items.EquipmentManager _equipment;
 
         // ── Lifecycle ──────────────────────────────────────────────────────
 
@@ -41,6 +42,7 @@ namespace DCC.Multiplayer
             _attributes = GetComponent<EntityAttributes>();
             _rb = GetComponent<Rigidbody>();
             _inventory = GetComponent<Items.Inventory>();
+            _equipment = GetComponent<Items.EquipmentManager>();
         }
 
         public override void OnNetworkSpawn()

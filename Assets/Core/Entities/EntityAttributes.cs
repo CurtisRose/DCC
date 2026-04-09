@@ -70,6 +70,12 @@ namespace DCC.Core.Entities
         public event Action<float> OnHealed;
         public event Action OnDied;
 
+        /// <summary>
+        /// Fired when this entity is killed. Passes the killer's NetworkObject and this entity's definition.
+        /// External systems (GoldManager, ViewerSystem, SystemAI) subscribe to distribute rewards.
+        /// </summary>
+        public event Action<NetworkObject, EntityDefinition> OnKilled;
+
         // ── Lifecycle ──────────────────────────────────────────────────────
 
         private void Awake()
@@ -136,9 +142,16 @@ namespace DCC.Core.Entities
 
         // ── Stat allocation (only in safe rooms in DCC) ────────────────────
 
+        [SerializeField, Tooltip(
+            "Tag required to allocate stat points (e.g., InSafeRoom). " +
+            "Leave null to allow stat allocation anywhere (pre-Phase 5).")]
+        private Tags.TagDefinition _safeRoomTag;
+
         [ServerRpc(RequireOwnership = false)]
         public void AllocateStatPointServerRpc(CrawlerStat stat, ServerRpcParams rpcParams = default)
         {
+            // In the DCC books, stat points can only be allocated in safe rooms.
+            if (_safeRoomTag != null && !Tags.HasTag(_safeRoomTag)) return;
             if (!AttributeSet.AllocateStatPoint(stat)) return;
             SyncAllStats();
         }
@@ -327,8 +340,12 @@ namespace DCC.Core.Entities
             _networkLevel.Value = AttributeSet.Level;
         }
 
+        // Track last damage source for kill attribution (gold, XP, achievements).
+        private EffectContext _lastDamageContext;
+
         private void HandleDamageTaken(float raw, float final, EffectContext ctx)
         {
+            _lastDamageContext = ctx;
             SyncHealth();
             OnDamaged?.Invoke(final, ctx);
             NotifyDamageClientRpc(final, ctx.SourceNetworkObjectId);
@@ -342,8 +359,33 @@ namespace DCC.Core.Entities
 
         private void HandleDeath()
         {
+            AwardKillRewards();
             OnDied?.Invoke();
             NotifyDeathClientRpc();
+        }
+
+        /// <summary>
+        /// Resolves the killer and fires OnKilled so external systems can award gold, XP, achievements, etc.
+        /// Also awards XP directly (XP is part of the core progression loop).
+        /// </summary>
+        private void AwardKillRewards()
+        {
+            if (!IsServer) return;
+            if (_lastDamageContext.SourceNetworkObjectId == 0) return;
+
+            // Find the killer's NetworkObject.
+            if (!NetworkManager.Singleton.SpawnManager.SpawnedObjects.TryGetValue(
+                    _lastDamageContext.SourceNetworkObjectId, out var killerObj))
+                return;
+
+            // Award XP (core progression, stays here).
+            int xp = _definition != null ? _definition.BaseXP : 10;
+            var killerAttrs = killerObj.GetComponent<EntityAttributes>();
+            if (killerAttrs != null)
+                killerAttrs.GrantXP(xp);
+
+            // Fire event for external systems (GoldManager, ViewerSystem, SystemAI).
+            OnKilled?.Invoke(killerObj, _definition);
         }
 
         [ClientRpc]

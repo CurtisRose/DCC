@@ -128,6 +128,20 @@ namespace DCC.Items
         public ItemDefinition GetItem(int slot) =>
             slot >= 0 && slot < _slots.Length ? _slots[slot].Definition : null;
 
+        /// <summary>Remove one item from a slot. Returns the definition, or null if empty.</summary>
+        public ItemDefinition RemoveItem(int slot)
+        {
+            if (!IsServer) return null;
+            if (slot < 0 || slot >= _slots.Length) return null;
+            if (_slots[slot].Definition == null) return null;
+
+            var def = _slots[slot].Definition;
+            _slots[slot].Quantity--;
+            if (_slots[slot].Quantity <= 0)
+                _slots[slot] = default;
+            return def;
+        }
+
         // ── Private resolution ─────────────────────────────────────────────
 
         private void ResolveAtPosition(ItemDefinition def, Vector3 pos, EffectContext ctx)

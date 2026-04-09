@@ -111,6 +111,10 @@ namespace DCC.Multiplayer
             foreach (var clientId in NetworkManager.Singleton.ConnectedClientsIds)
                 SpawnPlayer(clientId);
 
+            // Initialize floor progression (FloorManager starts itself on OnNetworkSpawn
+            // if _startingFloor is set, but we can also kick it off explicitly here
+            // if the FloorManager is a scene object that was already spawned).
+
             Debug.Log("[NetworkGameManager] Match started.");
         }
 
